@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:app/face_detector_page.dart';
-import 'package:app/main.dart';
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 
@@ -54,7 +52,6 @@ class _HomePageState extends State<HomePage> {
                 'Go to Face Detect Test',
                 style: TextStyle(fontSize: 24),
               ),
-              _buildIconWidget(Icons.photo_camera),
             ],
           ),
         ),

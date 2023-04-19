@@ -4,7 +4,10 @@ import 'package:app/util/screen_mode.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:image/image.dart' as image;
 import 'package:image_picker/image_picker.dart';
 
 class CameraView extends StatefulWidget {
@@ -38,6 +41,8 @@ class _CameraViewState extends State<CameraView> {
   final bool _allowPicker = true;
   bool _chagingCameraLens = false;
 
+  bool _isLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +73,7 @@ class _CameraViewState extends State<CameraView> {
     final camera = cameras[_cameraIndex];
     _controller = CameraController(
       camera,
-      ResolutionPreset.high,
+      ResolutionPreset.low,
       enableAudio: false,
     );
     _controller?.initialize().then((_) {
@@ -123,6 +128,10 @@ class _CameraViewState extends State<CameraView> {
     widget.onImage(inputImage);
   }
 
+  int? faceRedColor = 0;
+  int? faceGreenColor = 0;
+  int? faceBlueColor = 0;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,8 +171,8 @@ class _CameraViewState extends State<CameraView> {
         onPressed: _switchCamera,
         child: Icon(
           Platform.isIOS
-              ? Icons.flip_camera_ios_outlined
-              : Icons.flip_camera_android_rounded,
+              ? Icons.camera_alt_rounded
+              : Icons.camera_alt,
           size: 40,
         ),
         
@@ -172,16 +181,73 @@ class _CameraViewState extends State<CameraView> {
     );
   }
 
+
   Future _switchCamera() async {
+    XFile? picture;
+    try {
+      if (_controller != null && _controller!.value.isInitialized) {
+        _controller!.stopImageStream();
+        picture = await _controller!.takePicture();
+        setState(() {
+          _isLoading = true;
+        });
+        _convertImageToRGB(picture);
+      }
+      else {
+        print('take picture error');
+      }
+    } catch (e) {
+      print(e);
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _convertImageToRGB(XFile xFile) async {
+    // Convert the XFile to a compressed JPEG Uint8List
+    final Uint8List compressedImg = await convertXFileToJpg(xFile);
+
+    // Decode the JPEG to an RGB image
+    final decoder = image.JpegDecoder();
+    final decodedImg = decoder.decodeImage(compressedImg);
+
+    // Calculate the average R, G, and B values across all pixels
+    int totalR = 0, totalG = 0, totalB = 0;
+    for (int y = 0; y < decodedImg!.height; y++) {
+      for (int x = 0; x < decodedImg.width; x++) {
+        final pixel = decodedImg.getPixel(x, y);
+        totalR += image.getRed(pixel);
+        totalG += image.getGreen(pixel);
+        totalB += image.getBlue(pixel);
+      }
+    }
+    final numPixels = decodedImg.width * decodedImg.height;
+    final avgR = (totalR / numPixels).round();
+    final avgG = (totalG / numPixels).round();
+    final avgB = (totalB / numPixels).round();
+
+    // Combine the R, G, and B values into a single integer
+    final rgb = (avgR << 16) + (avgG << 8) + avgB;
+    debugPrint('Red:$avgR Green:$avgG Blue:$avgB  RGB VALUES');
+
     setState(() {
-      _chagingCameraLens = true;
+      _isLoading = false;
+      faceRedColor = avgR;
+      faceGreenColor = avgG;
+      faceBlueColor = avgB;
     });
-    _cameraIndex = (_cameraIndex + 1) % cameras.length;
-    await _startLive();
-    await _startLive();
-    setState(() {
-      _chagingCameraLens = false;
-    });
+    _controller?.startImageStream(_processCameraImage);
+    setState(() {});
+  }
+
+  Future<Uint8List> convertXFileToJpg(XFile file) async {
+    final bytes = await file.readAsBytes();
+    final compressedBytes = await FlutterImageCompress.compressWithList(
+      bytes,
+      quality: 90,
+      format: CompressFormat.jpeg,
+    );
+    debugPrint('$compressedBytes <<<<<');
+    return compressedBytes;
   }
 
   Widget _body() {
@@ -278,6 +344,7 @@ class _CameraViewState extends State<CameraView> {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          if(_isLoading) const Center(child: CircularProgressIndicator()),
           Transform.scale(
             scale: scale,
             child: Center(
@@ -288,7 +355,29 @@ class _CameraViewState extends State<CameraView> {
                   : CameraPreview(_controller!),
             ),
           ),
-          if (widget.customPaint != null) widget.customPaint!,
+          if (widget.customPaint != null && !_controller!.value.isTakingPicture)
+            widget.customPaint!,
+          Positioned(
+            bottom: 140,
+            left: 70,
+            right: 50,
+            child: Row(
+              children: [
+                Text(
+                  "Red : $faceRedColor ",
+                  style: const TextStyle(fontSize: 16,color: Colors.red),
+                ),
+                Text(
+                  "Green : $faceGreenColor ",
+                  style: const TextStyle(fontSize: 16,color: Colors.green),
+                ),
+                Text(
+                  "Blue: $faceBlueColor",
+                  style: const TextStyle(fontSize: 16,color: Colors.blue),
+                ),
+              ],
+            ),
+          ),
           Positioned(
             bottom: 100,
             left: 50,
