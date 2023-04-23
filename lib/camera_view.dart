@@ -160,6 +160,109 @@ class _CameraViewState extends State<CameraView> {
     );
   }
 
+
+  // ToDo screen video
+
+  final FaceDetector faceDetector = FirebaseVision.instance.faceDetector(
+    FaceDetectorOptions(
+      enableClassification: true,
+      enableTracking: true,
+    ),
+  );
+
+
+  void _detectFaces() async {
+    final VideoPlayerController controller = VideoPlayerController.asset('assets/video.mp4');
+    await controller.initialize();
+    await controller.play();
+
+    controller.addListener(() async {
+      final image = await controller.formatHint;
+      final inputImageData = FirebaseVisionImage.fromImage(image);
+      final List<Face> faces = await faceDetector.processImage(inputImageData);
+
+      Future<Image> _loadImage(String assetName) async {
+        final ByteData assetByteData = await rootBundle.load(assetName);
+        final Uint8List imageData = assetByteData.buffer.asUint8List();
+        final Completer<Image> completer = Completer();
+        decodeImageFromList(imageData, (Image img) {
+          return completer.complete(img);
+        });
+        return completer.future;
+      }
+
+      void _drawFaceRectangles(Canvas canvas, Image image, List<Face> faces) {
+        final Paint paint = Paint()
+          ..color = Color.fromARGB(255, 255, 0, 0)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0;
+
+        for (final face in faces) {
+          final rect = face.boundingBox;
+          canvas.drawRect(rect, paint);
+        }
+      }
+
+      void _detectFaces() async {
+        // ...
+
+        final Image image = await _loadImage('assets/background.png');
+
+        controller.addListener(() async {
+          // ...
+
+          final PictureRecorder recorder = ui.PictureRecorder();
+          final Canvas canvas = Canvas(recorder);
+
+          canvas.drawImage(image, const Offset(0.0, 0.0), ui.Paint());
+
+          _drawFaceRectangles(canvas, image, faces);
+
+          final Picture picture = recorder.endRecording();
+          final Image outputImage = await picture.toImage(image.width, image.height);
+
+          void _detectFaces() async {
+            // ...
+
+            controller.addListener(() async {
+              // ...
+
+              final PictureRecorder recorder = PictureRecorder();
+              final Canvas canvas = Canvas(recorder);
+
+              canvas.drawImage(image, const Offset(0.0, 0.0), Paint());
+
+              _drawFaceRectangles(canvas, image, faces);
+
+              final Picture picture = recorder.endRecording();
+              final Image outputImage = await picture.toImage(image.width, image.height);
+
+              setState(() {
+                _outputImage = outputImage;
+              });
+            });
+          }
+
+          @override
+          Widget build(BuildContext context) {
+            return Scaffold(
+                body: Center(
+                    child: outputImage
+                ))
+            ;
+          }
+
+        }
+
+            setState(() {});
+      }
+    });
+  }
+
+// ......
+
+
+
   Widget? _floatingActionButton() {
     if (_mode == ScreenMode.gallery) return null;
     if (cameras.length == 1) return null;
@@ -171,8 +274,9 @@ class _CameraViewState extends State<CameraView> {
         onPressed: _switchCamera,
         child: Icon(
           Platform.isIOS
-              ? Icons.camera_alt_rounded
+              ? Icons.video_call_rounded
               : Icons.camera_alt,
+
           size: 40,
         ),
         
